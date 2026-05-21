@@ -1,18 +1,25 @@
+import argparse
 import os
+
 import torch
 from torchvision.utils import save_image
 
 from dataset import get_dataloaders
 from models import get_resnet18
 
+parser = argparse.ArgumentParser()
+parser.add_argument("--model_path", type=str, default="results/models/supervised_finetune_labels_1.0.pth")
+parser.add_argument("--output_dir", type=str, default="results/error_examples")
+args = parser.parse_args()
+
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-os.makedirs("results/error_examples", exist_ok=True)
+os.makedirs(args.output_dir, exist_ok=True)
 
 _, _, test_loader = get_dataloaders()
 
 model = get_resnet18(num_classes=37, freeze_backbone=False)
-model.load_state_dict(torch.load("results/models/finetune_model.pth", map_location=device))
+model.load_state_dict(torch.load(args.model_path, map_location=device))
 model = model.to(device)
 model.eval()
 
@@ -30,7 +37,7 @@ with torch.no_grad():
         for i in range(len(labels)):
             if predictions[i] != labels[i] and saved_count < max_examples:
                 filename = (
-                    f"results/error_examples/"
+                    f"{args.output_dir}/"
                     f"wrong_{saved_count}_pred_{predictions[i].item()}_true_{labels[i].item()}.png"
                 )
 

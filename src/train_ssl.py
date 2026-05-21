@@ -1,5 +1,7 @@
 import argparse
+import csv
 import itertools
+import os
 
 import torch
 import torch.nn as nn
@@ -12,10 +14,13 @@ from models import get_resnet18
 parser = argparse.ArgumentParser()
 parser.add_argument("--label_fraction", type=float, default=0.1)
 parser.add_argument("--threshold", type=float, default=0.95)
+parser.add_argument("--epochs", type=int, default=20)
 args = parser.parse_args()
 
-EPOCHS = 5
 UNSUPERVISED_WEIGHT = 1.0
+
+os.makedirs("results/models", exist_ok=True)
+os.makedirs("results/tables", exist_ok=True)
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
@@ -27,10 +32,17 @@ labeled_loader, unlabeled_loader, val_loader, test_loader = get_ssl_dataloaders(
 model = get_resnet18(num_classes=37, freeze_backbone=False)
 model = model.to(device)
 
-criterion = nn.CrossEntropyLoss()
+supervised_criterion = nn.CrossEntropyLoss()
+unsupervised_criterion = nn.CrossEntropyLoss(reduction="none")
 optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
-for epoch in range(EPOCHS):
+best_val_accuracy = 0.0
+best_model_path = (
+    f"results/models/ssl_fixmatch_labels_{args.label_fraction}_"
+    f"threshold_{args.threshold}.pth"
+)
+
+for epoch in range(args.epochs):
     model.train()
     total_loss = 0
     total_supervised_loss = 0
@@ -47,7 +59,7 @@ for epoch in range(EPOCHS):
         strong_images = strong_images.to(device)
 
         supervised_outputs = model(labeled_images)
-        supervised_loss = criterion(supervised_outputs, labels)
+        supervised_loss = supervised_criterion(supervised_outputs, labels)
 
         with torch.no_grad():
             weak_outputs = model(weak_images)
@@ -56,12 +68,12 @@ for epoch in range(EPOCHS):
             mask = max_probs.ge(args.threshold).float()
 
         strong_outputs = model(strong_images)
-        unsupervised_losses = criterion(strong_outputs, pseudo_labels)
+        unsupervised_losses = unsupervised_criterion(strong_outputs, pseudo_labels)
 
         if mask.sum() > 0:
-            unsupervised_loss = (unsupervised_losses * mask).mean()
+            unsupervised_loss = (unsupervised_losses * mask).sum() / mask.sum()
         else:
-            unsupervised_loss = torch.tensor(0.0).to(device)
+            unsupervised_loss = torch.tensor(0.0, device=device)
 
         loss = supervised_loss + UNSUPERVISED_WEIGHT * unsupervised_loss
 
@@ -90,15 +102,21 @@ for epoch in range(EPOCHS):
 
     val_accuracy = correct / total
 
+    if val_accuracy > best_val_accuracy:
+        best_val_accuracy = val_accuracy
+        torch.save(model.state_dict(), best_model_path)
+
     print(
-        f"Epoch {epoch + 1}/{EPOCHS}, "
+        f"Epoch {epoch + 1}/{args.epochs}, "
         f"Loss: {total_loss / len(labeled_loader):.4f}, "
         f"Supervised Loss: {total_supervised_loss / len(labeled_loader):.4f}, "
         f"Unsupervised Loss: {total_unsupervised_loss / len(labeled_loader):.4f}, "
         f"Val Accuracy: {val_accuracy:.4f}"
     )
 
+model.load_state_dict(torch.load(best_model_path, map_location=device))
 model.eval()
+
 correct = 0
 total = 0
 
@@ -126,3 +144,34 @@ print(f"Label Fraction: {args.label_fraction}")
 print(f"Confidence Threshold: {args.threshold}")
 print(f"SSL Test Accuracy: {test_accuracy:.4f}")
 print(f"SSL Macro F1: {macro_f1:.4f}")
+print(f"Saved Best Model: {best_model_path}")
+
+results_path = "results/tables/main_results.csv"
+file_exists = os.path.exists(results_path)
+
+with open(results_path, "a", newline="") as file:
+    writer = csv.DictWriter(
+        file,
+        fieldnames=[
+            "method",
+            "label_fraction",
+            "threshold",
+            "epochs",
+            "best_val_accuracy",
+            "test_accuracy",
+            "macro_f1"
+        ]
+    )
+
+    if not file_exists:
+        writer.writeheader()
+
+    writer.writerow({
+        "method": "ssl_fixmatch",
+        "label_fraction": args.label_fraction,
+        "threshold": args.threshold,
+        "epochs": args.epochs,
+        "best_val_accuracy": best_val_accuracy,
+        "test_accuracy": test_accuracy,
+        "macro_f1": macro_f1
+    })
