@@ -12,11 +12,11 @@ print("Using device:", device)
 
 train_loader, val_loader, test_loader = get_dataloaders()
 
-model = get_resnet18(num_classes=37, freeze_backbone=True)
+model = get_resnet18(num_classes=37, freeze_backbone=False)
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.fc.parameters(), lr=LEARNING_RATE)
+optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 for epoch in range(EPOCHS):
     model.train()
@@ -71,4 +71,4 @@ with torch.no_grad():
         total += labels.size(0)
 
 test_accuracy = correct / total
-print(f"37-Class Linear Probing Test Accuracy: {test_accuracy:.4f}")
+print(f"37-Class Fine-Tuning Test Accuracy: {test_accuracy:.4f}")
