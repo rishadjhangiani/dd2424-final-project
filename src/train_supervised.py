@@ -97,3 +97,5 @@ macro_f1 = f1_score(all_labels, all_predictions, average="macro")
 print(f"Label Fraction: {args.label_fraction}")
 print(f"37-Class {experiment_name} Test Accuracy: {test_accuracy:.4f}")
 print(f"37-Class {experiment_name} Macro F1: {macro_f1:.4f}")
+
+torch.save(model.state_dict(), "results/models/finetune_model.pth")
