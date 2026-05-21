@@ -4,6 +4,12 @@ import torch.optim as optim
 from dataset import get_dataloaders
 from models import get_resnet18
 from sklearn.metrics import f1_score
+import argparse
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--mode", choices=["linear_probe", "finetune"], required=True)
+parser.add_argument("--label_fraction", type=float, default=1.0)
+args = parser.parse_args()
 
 EPOCHS = 5
 LEARNING_RATE = 0.001
@@ -11,13 +17,21 @@ LEARNING_RATE = 0.001
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-train_loader, val_loader, test_loader = get_dataloaders()
+train_loader, val_loader, test_loader = get_dataloaders(
+    label_fraction=args.label_fraction
+)
+if args.mode == "linear_probe":
+    model = get_resnet18(num_classes=37, freeze_backbone=True)
+    optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
+    experiment_name = "Linear Probing"
 
-model = get_resnet18(num_classes=37, freeze_backbone=False)
+else:
+    model = get_resnet18(num_classes=37, freeze_backbone=False)
+    optimizer = optim.Adam(model.parameters(), lr=0.0001)
+    experiment_name = "Fine-Tuning"
+
 model = model.to(device)
-
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.parameters(), lr=0.0001)
 
 for epoch in range(EPOCHS):
     model.train()
@@ -80,5 +94,6 @@ with torch.no_grad():
 test_accuracy = correct / total
 macro_f1 = f1_score(all_labels, all_predictions, average="macro")
 
-print(f"37-Class Fine-Tuning Test Accuracy: {test_accuracy:.4f}")
-print(f"37-Class Fine-Tuning Macro F1: {macro_f1:.4f}")
+print(f"Label Fraction: {args.label_fraction}")
+print(f"37-Class {experiment_name} Test Accuracy: {test_accuracy:.4f}")
+print(f"37-Class {experiment_name} Macro F1: {macro_f1:.4f}")

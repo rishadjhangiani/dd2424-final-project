@@ -5,6 +5,9 @@
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 
+from torch.utils.data import Subset
+import random
+
 # Image size
 IMAGE_SIZE = 224
 
@@ -25,8 +28,22 @@ test_transforms = transforms.Compose([
     transforms.ToTensor(),
 ])
 
+def create_subset(dataset, fraction):
+    """
+    Creates a random subset of the dataset.
+    """
 
-def get_dataloaders():
+    subset_size = int(len(dataset) * fraction)
+
+    indices = list(range(len(dataset)))
+    random.shuffle(indices)
+
+    subset_indices = indices[:subset_size]
+
+    return Subset(dataset, subset_indices)
+
+
+def get_dataloaders(label_fraction=1.0):
     """
     Creates train, validation, and test dataloaders
     using Oxford-IIIT Pet Dataset.
@@ -58,6 +75,8 @@ def get_dataloaders():
         full_train_dataset,
         [train_size, val_size]
     )
+
+    train_dataset = create_subset(train_dataset, label_fraction)
 
     # Validation should use test transforms
     val_dataset.dataset.transform = test_transforms
