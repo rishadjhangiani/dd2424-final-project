@@ -1,3 +1,7 @@
+# gets oxford pet dataset, preprocesses and transforms images (cannot directly read raw image files), 
+# created test / train / validation splits, and created data loaders to create mini batches
+
+
 from torchvision import datasets, transforms
 from torch.utils.data import DataLoader, random_split
 
