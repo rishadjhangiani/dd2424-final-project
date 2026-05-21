@@ -3,6 +3,7 @@ import torch.nn as nn
 import torch.optim as optim
 from dataset import get_dataloaders
 from models import get_resnet18
+from sklearn.metrics import f1_score
 
 EPOCHS = 5
 LEARNING_RATE = 0.001
@@ -59,6 +60,9 @@ model.eval()
 correct = 0
 total = 0
 
+all_predictions = []
+all_labels = []
+
 with torch.no_grad():
     for images, labels in test_loader:
         images = images.to(device)
@@ -70,5 +74,11 @@ with torch.no_grad():
         correct += (predictions == labels).sum().item()
         total += labels.size(0)
 
+        all_predictions.extend(predictions.cpu().numpy())
+        all_labels.extend(labels.cpu().numpy())
+
 test_accuracy = correct / total
+macro_f1 = f1_score(all_labels, all_predictions, average="macro")
+
 print(f"37-Class Fine-Tuning Test Accuracy: {test_accuracy:.4f}")
+print(f"37-Class Fine-Tuning Macro F1: {macro_f1:.4f}")
