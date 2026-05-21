@@ -1,47 +1,22 @@
 import torch
 import torch.nn as nn
 import torch.optim as optim
-from torchvision import datasets, transforms
-from torch.utils.data import DataLoader
+from dataset import get_dataloaders
 from models import get_resnet18
 
-IMAGE_SIZE = 224
-BATCH_SIZE = 32
-EPOCHS = 3
+EPOCHS = 5
+LEARNING_RATE = 0.001
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device:", device)
 
-transform = transforms.Compose([
-    transforms.Resize((IMAGE_SIZE, IMAGE_SIZE)),
-    transforms.RandomHorizontalFlip(),
-    transforms.ToTensor(),
-])
+train_loader, val_loader, test_loader = get_dataloaders()
 
-train_dataset = datasets.OxfordIIITPet(
-    root="./data",
-    split="trainval",
-    target_types="binary-category",
-    download=True,
-    transform=transform
-)
-
-test_dataset = datasets.OxfordIIITPet(
-    root="./data",
-    split="test",
-    target_types="binary-category",
-    download=True,
-    transform=transform
-)
-
-train_loader = DataLoader(train_dataset, batch_size=BATCH_SIZE, shuffle=True)
-test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False)
-
-model = get_resnet18(num_classes=2, freeze_backbone=True)
+model = get_resnet18(num_classes=37, freeze_backbone=True)
 model = model.to(device)
 
 criterion = nn.CrossEntropyLoss()
-optimizer = optim.Adam(model.fc.parameters(), lr=0.001)
+optimizer = optim.Adam(model.fc.parameters(), lr=LEARNING_RATE)
 
 for epoch in range(EPOCHS):
     model.train()
@@ -60,7 +35,25 @@ for epoch in range(EPOCHS):
 
         total_loss += loss.item()
 
-    print(f"Epoch {epoch + 1}/{EPOCHS}, Loss: {total_loss / len(train_loader):.4f}")
+    model.eval()
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for images, labels in val_loader:
+            images = images.to(device)
+            labels = labels.to(device)
+
+            outputs = model(images)
+            predictions = torch.argmax(outputs, dim=1)
+
+            correct += (predictions == labels).sum().item()
+            total += labels.size(0)
+
+    val_accuracy = correct / total
+    avg_loss = total_loss / len(train_loader)
+
+    print(f"Epoch {epoch + 1}/{EPOCHS}, Loss: {avg_loss:.4f}, Val Accuracy: {val_accuracy:.4f}")
 
 model.eval()
 correct = 0
@@ -77,5 +70,5 @@ with torch.no_grad():
         correct += (predictions == labels).sum().item()
         total += labels.size(0)
 
-accuracy = correct / total
-print(f"Dog vs Cat Test Accuracy: {accuracy:.4f}")
+test_accuracy = correct / total
+print(f"37-Class Linear Probing Test Accuracy: {test_accuracy:.4f}")
